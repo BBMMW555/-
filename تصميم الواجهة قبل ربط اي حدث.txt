@@ -1,0 +1,371 @@
+
+# ------------------------ استيراد المكتبات ------------------------
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+   QLabel, QPushButton, QTextEdit, QLineEdit, 
+   QFrame, QGraphicsDropShadowEffect, QMessageBox)
+from PyQt5.QtCore import Qt, QEvent, QPoint, QTimer, QRect  # أضفنا QRect هنا
+from PyQt5.QtGui import QColor, QPixmap
+
+# ------------------------ تعريف نافذة التطبيق الرئيسية ------------------------
+class MainWindow(QMainWindow):
+    def __init__(self):
+        """
+        تهيئة النافذة الرئيسية للتطبيق.
+        """
+        super().__init__()
+        
+        self.drag_pos = None   # لتفعيل خاصية السحب وتحريك النافذة.
+        self.thinking_dialog = None # نافذة التفكير (تُستخدم لاحقًا).
+        self.icon_pos = None
+        self.is_dragging = False
+        self.dragging_from_icon = False
+        self.mouse_offset = None  # الإزاحة بين الماوس والأيقونة
+
+        self.initUI()# تهيئة واجهة المستخدم (UI).  
+
+    
+        # ------------------------ رسالة ترحيبية مؤجلة ------------------------
+        QTimer.singleShot(3000, self.welcome_message) 
+
+    # ------------------------ تهيئة واجهة المستخدم ------------------------
+    def initUI(self):
+        # خصائص النافذة
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setGeometry(100, 100, 400, 500)  # حجم الأيقونة الأولي
+
+        # إعداد التخطيط الأساسي
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.main_layout = QVBoxLayout(self.central_widget)
+        self.main_layout.setContentsMargins(10, 10, 10, 10)  
+
+        # إنشاء أقسام الواجهة
+        self.create_icon()  # إنشاء الأيقونة
+        self.create_chat_frame()  # إنشاء إطار المحادثة
+        self.create_input_area()  # إنشاء منطقة الإدخال
+        self.create_control_buttons()  # إنشاء أزرار التحكم
+
+        # ربط الأحداث
+        self.icon.installEventFilter(self)
+
+    # ------------------------ إنشاء الأيقونة ------------------------
+    def create_icon(self):
+        """
+        إنشاء أيقونة التطبيق مع التحقق من تحميل الصورة.
+        """
+        self.icon = QLabel()
+    
+        # تحميل الصورة
+        pixmap = QPixmap("C:/Users/bassam/Desktop/bassam/assets/icon.png")
+        if pixmap.isNull():
+            # إذا فشل تحميل الصورة، عرض رسالة خطأ في وحدة التحكم
+            print("لا يوجد صورة للايقونة. الرجاء وضع الصورة في المسار الصحيح ")
+            # إنشاء صورة افتراضية شفافة
+            pixmap = QPixmap(100, 100)
+            pixmap.fill(Qt.transparent)
+        else:
+            # إذا تم تحميل الصورة بنجاح، تغيير حجمها
+            pixmap = pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.    SmoothTransformation)
+    
+        # تعيين الصورة إلى عنصر QLabel
+        self.icon.setPixmap(pixmap)
+    
+        # إضافة خصائص التصميم
+        self.icon.setAlignment(Qt.AlignCenter)
+        self.icon.setStyleSheet("""
+            QLabel {
+                background: rgba(0, 0, 0, 0);
+                border-radius: 50px;
+                padding: 10px;
+            }
+        """)
+        self.main_layout.addWidget(self.icon)
+    # ------------------------ إنشاء إطار المحادثة ------------------------
+    def create_chat_frame(self):
+        self.chat_frame = QFrame()
+        self.chat_frame.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 220);
+                border: 1px solid #bdc3c7;
+                border-radius: 15px;
+            }
+        """)
+        #self.chat_frame.hide() # مخفي في البداية
+        
+        # إضافة ظل للإطار
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(5)
+        shadow.setColor(QColor(0, 0, 0, 100))
+        shadow.setOffset(0, 10)
+        self.chat_frame.setGraphicsEffect(shadow)
+        
+        self.chat_layout = QVBoxLayout(self.chat_frame)
+        self.chat_layout.setContentsMargins(10, 10, 10, 10)
+        self.chat_layout.setSpacing(10)
+        
+        # إنشاء سجل المحادثة
+        self.chat_log = QTextEdit()
+        self.chat_log.setReadOnly(True)
+        self.chat_log.setStyleSheet("""
+            QTextEdit {
+                background: rgba(255, 255, 255, 200);
+                border: 1px solid #bdc3c7;
+                border-radius: 10px;
+                padding: 10px;
+                font-size: 14px;
+            }
+        """)
+        self.chat_layout.addWidget(self.chat_log)
+        self.main_layout.addWidget(self.chat_frame)
+
+    # ------------------------ إنشاء منطقة إدخال الرسائل ------------------------
+    def create_input_area(self):
+        input_frame = QFrame()
+        input_frame.setStyleSheet("""
+            QFrame {
+                background-color: rgba(255, 255, 255, 200);
+                border: 1px solid gray;
+                border-radius: 10px;
+            }
+        """)
+        input_layout = QHBoxLayout(input_frame)
+        input_layout.setSpacing(5)
+
+        # زر الميكروفون
+        self.talk_btn = QPushButton("🎤")
+        self.talk_btn.setStyleSheet("""
+            QPushButton {
+                background-color: lightblue;
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #ffda03;
+            }
+        """)
+
+        # حقل إدخال النص
+        self.input_field = QLineEdit()
+        self.input_field.setPlaceholderText("اكتب رسالتك هنا...")
+        self.input_field.setStyleSheet("""
+            QLineEdit {
+                background-color: rgba(255, 255, 255, 200);
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 5px;
+            }
+        """)
+
+        # زر إرسال الملفات
+        self.file_btn = QPushButton("📁")
+        self.file_btn.setStyleSheet("""
+            QPushButton {
+                background-color: lightblue;
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #ffda03;
+            }
+        """)
+
+        # زر الإرسال
+        self.send_btn = QPushButton("➤")
+        self.send_btn.setStyleSheet("""
+            QPushButton {
+                background-color: lightblue;
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #ffda03;
+            }
+        """)
+
+        # إضافة المكونات
+        input_layout.addWidget(self.talk_btn)
+        input_layout.addWidget(self.input_field)
+        input_layout.addWidget(self.file_btn)
+        input_layout.addWidget(self.send_btn)
+        self.chat_layout.addWidget(input_frame)
+
+    # ------------------------ إنشاء أزرار التحكم ------------------------
+    def create_control_buttons(self):
+        control_frame = QFrame()
+        control_frame.setStyleSheet("""
+            QFrame {
+                background-color: rgba(255, 255, 255, 200);
+                border: 1px solid gray;
+                border-radius: 10px;
+            }
+        """)
+        control_layout = QHBoxLayout(control_frame)
+        control_layout.setSpacing(50)
+
+        # زر الإغلاق
+        self.close_btn = QPushButton("إغلاق")
+        self.close_btn.setFixedSize(50, 30)
+        self.close_btn.setToolTip("إغلاق النافذة")
+        self.close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: lightblue;
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #ffda03;
+            }
+        """)
+        self.close_btn.clicked.connect(self.close)
+
+        # زر التطوير
+        self.update_btn = QPushButton("🚀 تطوير")
+        self.update_btn.setFixedSize(60, 30)
+        self.update_btn.setToolTip("وضع التطوير")
+        self.update_btn.setStyleSheet("""
+            QPushButton {
+                background-color: lightblue;
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #ffda03;
+            }
+        """)
+
+        # زر الإعدادات
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setToolTip("الإعدادات")
+        self.settings_btn.setFixedSize(40, 30)
+        self.settings_btn.setStyleSheet("""
+            QPushButton {
+                background-color: lightblue;
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #ffda03;
+            }
+        """)
+
+        # زر التفكير العميق
+        self.think_btn = QPushButton("💭 تفكير عميق")
+        self.think_btn.setToolTip("تفعيل وضع التفكير المتقدم")
+        self.think_btn.setFixedSize(100, 30)
+        self.think_btn.setStyleSheet("""
+            QPushButton {
+                background-color: lightblue;
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #ffda03;
+            }
+        """)
+        self.think_btn.clicked.connect(self.show_thinking_dialog)
+
+        # إضافة الأزرار
+        control_layout.addWidget(self.close_btn)
+        control_layout.addWidget(self.update_btn)
+        control_layout.addWidget(self.settings_btn)
+        control_layout.addWidget(self.think_btn)
+        self.chat_layout.addWidget(control_frame)
+
+  
+    # ------------------------ التعامل مع أحداث الماوس ---------------------
+    def eventFilter(self, obj, event):
+        if obj == self.icon:  # التعامل فقط مع أحداث الأيقونة
+            if event.type() == QEvent.Enter:
+                # تفتح النافذة فقط إذا كانت مغلقة وليس أثناء السحب
+                if not self.chat_frame.isVisible() and not self.is_dragging:
+                    self.chat_frame.show()
+                    self.resize(400, 500)
+                return True
+        return super().eventFilter(obj, event)
+        
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            icon_rect = QRect(self.icon.pos(), self.icon.size())
+            if icon_rect.contains(event.pos()):
+                self.dragging_from_icon = True  # تم البدء بالسحب من الأيقونة
+            self.is_dragging = True
+            self.drag_pos = event.globalPos()
+            event.accept()
+    
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.LeftButton and self.drag_pos:
+            delta = event.globalPos() - self.drag_pos
+            self.move(self.pos() + delta)
+            self.drag_pos = event.globalPos()
+            
+            # إذا كان السحب بدأ من الأيقونة والنافذة مفتوحة
+            if self.dragging_from_icon and self.chat_frame.isVisible():
+                self.chat_frame.hide()
+            
+            # تحديث موقع الأيقونة
+            self.icon.move(self.width()//2 - self.icon.width()//2, 10)
+            event.accept()
+    
+    def mouseReleaseEvent(self, event):
+        self.is_dragging = False
+        self.dragging_from_icon = False  # إعادة تعيين الحالة
+        self.drag_pos = None
+        event.accept()
+
+    
+    
+    #     # ------------------------ رسالة ترحيبية ------------------------
+    def welcome_message(self):
+        """عرض رسالة الترحيب للمستخدم عند تشغيل التطبيق"""
+        welcome_text = (
+            "مرحبًا! أنا ماني، مساعدك الذكي.\n"
+            "كيف يمكنني مساعدتك اليوم؟"
+        )
+        self.update_chat_display(welcome_text, "النظام")
+
+    def update_chat_display(self, message, sender):
+        """تحديث عرض المحادثة"""
+        if sender == "النظام":
+            self.chat_log.append(f'<div style="color: #27ae60;"><b>{sender}:</b> {message}</div>')
+        else:
+            self.chat_log.append(f'<div style="color: #2980b9;"><b>{sender}:</b> {message}</div>')
+
+    # ------------------------ وظائف الأزرار ------------------------
+    def send_message(self):
+        """إرسال الرسالة المدخلة من المستخدم"""
+        message = self.input_field.text()
+        if message:
+            self.chat_log.append(f'<div style="color: #2980b9;"><b>أنت:</b> {message}</div>')
+            self.input_field.clear()
+
+    def show_thinking_dialog(self):
+        """عرض نافذة التفكير المتقدم"""
+        user_input = self.input_field.text().strip()
+        if not user_input:
+            QMessageBox.warning(self, "تنبيه", "يرجى كتابة نص للتحليل.")
+            return
+        # يمكنك إضافة نافذة التفكير هنا
+
+
+        
+
+
+
+
+
+if __name__ == "__main__":
+    from PyQt5.QtWidgets import QApplication
+    import sys
+
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())
